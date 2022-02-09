@@ -3,10 +3,52 @@ import * as THREE from "three";
 import { Earcut } from "three/src/extras/Earcut";
 import { Canvas } from "react-three-fiber";
 import CameraControls from "./CameraControls";
+import NumericInput from "./components/numericInput";
 
 THREE.Object3D.DefaultUp.set(0, 0, 1);
 
-async function loadData() {
+async function loadData(params = []) {
+  return new Promise(resolve => {
+    fetch(
+      `https://cchvf3mkzi.execute-api.eu-west-1.amazonaws.com/dev/build`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(params)
+      },
+    )
+    .then(response => response.body)
+    .then(stream => {
+      const reader = stream.getReader();
+
+      return new ReadableStream({
+        start(controller) {
+          function push() {
+            reader.read().then( ({done, value}) => {
+              if (done) {
+                controller.close();
+                return;
+              }
+              controller.enqueue(value);
+              push();
+            })
+          }
+          push();
+        }
+      });
+    })
+    .then(stream => {
+      return new Response(stream, { headers: { "Content-Type": "text/html" } }).text();
+    })
+    .then(result => {
+      resolve(JSON.parse(result))
+    });
+  })
+}
+
+async function loadStaticData() {
+  
   const response = await fetch(
     `/buildings.json`, {
       method: 'GET',
@@ -111,6 +153,8 @@ function generateGeometriesFromBuildingPart(buildingPart) {
 }
 
 function generateBuildingGeometriesFromData(data) {
+  console.log('**********')
+  console.log(data)
   // Iterate buildings, convert each building into a group of lines
   const buildingGeometries = data.items.map(building => {
     const tBuildingGroup = new THREE.Group();
@@ -119,6 +163,8 @@ function generateBuildingGeometriesFromData(data) {
       const tBuildingPartGroup = generateGeometriesFromBuildingPart(buildingPart);
       tBuildingGroup.add(tBuildingPartGroup);
     });
+
+    tBuildingGroup.tags = building.tags;
 
     return tBuildingGroup;
   });
@@ -142,6 +188,9 @@ export default function App() {
 
   const [buildingGeometries, setBuildingGeometries] = useState();
   const [sampleGeometries, setSampleGeometries] = useState([]);
+
+
+  console.log('render')
 
   useEffect(() => {
     loadData()
@@ -170,33 +219,53 @@ export default function App() {
   }, []);
 
   return (
-    <Canvas style = {{ height: 600 }}
-    camera = {{
-      up: [0, 0, 1],
-      position: [20000, 20000, 20000],
-      near: 1000,
-      far: 400000,
-      fov: 70
-    }}
-    onCreated = {({ gl }) => {
-      gl.setClearColor("#eeeeee");
-    }}>
-      <ambientLight intensity={ 1.0 } />
-      <directionalLight intensity={ 0.2 } position = { [1, 1, 1] } />
-      <Group
-        items={ sampleGeometries }
-      />
-      { buildingGeometries && buildingGeometries.length > 0 &&
-        buildingGeometries.map((buildingGeometry, index) => {
-          return <primitive
-            key={ index }
-            object={ buildingGeometry }
-            onClick={ e => console.log("onClick") }
-            onPointerOver={ e => console.log("onPointerOver") }
-            onPointerOut={ e => console.log("onPointerOut") } />;
-        })
-      }
-      <CameraControls / >
-    </Canvas>
+    <div>
+      <Canvas style = {{ height: 600 }}
+        camera = {{
+          up: [0, 0, 1],
+          position: [20000, 20000, 20000],
+          near: 1000,
+          far: 400000,
+          fov: 70
+        }}
+        onCreated = {({ gl }) => {
+          gl.setClearColor("#eeeeee");
+        }}>
+          <ambientLight intensity={ 1.0 } />
+          <directionalLight intensity={ 0.2 } position = { [1, 1, 1] } />
+          <Group
+            items={ sampleGeometries }
+          />
+          { buildingGeometries && buildingGeometries.length > 0 &&
+            buildingGeometries.map((buildingGeometry, index) => {
+              return <primitive
+                key={ index }
+                object={ buildingGeometry }
+                onClick={ e => console.log("onClick") }
+                onPointerOver={ e => console.log("onPointerOver") }
+                onPointerOut={ e => console.log("onPointerOut") } />;
+            })
+          }
+        <CameraControls / >
+      </Canvas>
+
+      <div>
+        <ul>
+          { buildingGeometries && buildingGeometries.length > 0 &&
+            buildingGeometries.map((buildingGeometry, index) => {
+              console.log(buildingGeometry.tags )
+              return (
+                <li key={ index }>
+                  { buildingGeometry.tags.name }
+                  <NumericInput index={index} name="width" value=""/>
+                  <NumericInput index={index} name="height" value=""/>
+                  <NumericInput index={index} name="roofAngle" value=""/>
+                </li>
+              )
+            })
+          }
+        </ul>
+      </div>
+    </div>
   );
 }
