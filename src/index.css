@@ -11,3 +11,29 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+
+
+
+
+.buildingListContainer {}
+.buildingList {
+  list-style-type: none;
+}
+
+.buildingListItem {
+
+}
+
+.buildinglistItemHCell {
+  font-weight: bold;
+  display: inline-block;
+  vertical-align: middle;
+  width: 20%;
+}
+
+.buildinglistItemCell {
+  display: inline-block;
+  vertical-align: middle;
+  width: 20%;
+}

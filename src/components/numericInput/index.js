@@ -1,10 +1,23 @@
 import React, { useEffect, useState } from "react";
 
-export default function NumericInput (props) {
+export default function NumericInput ({ name, onChange, type, initialValue }) {
+	const step = type === 'angle' ? 1 : 100;
 
-	console.log('numeric input', props)
+	const [value, setValue] = useState(initialValue);
+
+	const handleChange = e => {
+		setValue(e.target.value);
+		onChange(e)
+	}
 	
 	return (
-		<input type="number" value={props.value} placeholder={props.name}/>
+		<input 
+			name={name} 
+			type="number" 
+			step={step} 
+			value={value} 
+			placeholder={name} 
+			min="0" 
+			onChange={e => handleChange(e)}/>
 	);
 }

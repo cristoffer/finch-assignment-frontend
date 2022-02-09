@@ -7,7 +7,38 @@ import NumericInput from "./components/numericInput";
 
 THREE.Object3D.DefaultUp.set(0, 0, 1);
 
-async function loadData(params = []) {
+async function loadData(dimension) {
+  let params = [];
+
+  if (dimension) {
+    console.log('dimension', dimension)
+
+    console.log(Object.keys(dimension))
+
+    const keys = Object.keys(dimension);
+
+    let largest = 0;
+
+    keys.forEach((k) => {
+      if (parseInt(k) > largest) {
+        largest = parseInt(k);
+      }
+    })
+
+    params = Array.apply(null, Array(largest + 1)).map(function () {})
+
+
+    Object.keys(dimension).forEach((key) => {
+      console.log(key, dimension[key], params[key])
+      params[key] = dimension[key]
+
+    })
+
+
+    console.log('params', params)
+
+  }
+
   return new Promise(resolve => {
     fetch(
       `https://cchvf3mkzi.execute-api.eu-west-1.amazonaws.com/dev/build`, {
@@ -128,6 +159,7 @@ function createPolyline(vertices, color) {
 
 function generateGeometriesFromBuildingPart(buildingPart) {
   const tBuildingPartGroup = new THREE.Group();
+
   if (buildingPart.tags.type === 'floors') {
     // All floors are grouped
     buildingPart.items.forEach(floorGroup => {
@@ -137,6 +169,11 @@ function generateGeometriesFromBuildingPart(buildingPart) {
         const vertices = floorPolygon.points.map(point => [point.x, point.y, point.z]);
         const triangleIndices = Earcut.triangulate(vertices.flat(Infinity), undefined, 3);
         const tMesh = createMesh(triangleIndices.map(index => vertices[index]), 'gray');
+
+        console.log('floor', floorGroup )
+
+        tMesh.floorMeta = { ...floorGroup.tags }
+
         tBuildingPartGroup.add(tMesh);
       });
     });
@@ -149,12 +186,29 @@ function generateGeometriesFromBuildingPart(buildingPart) {
     });
   }
 
+  tBuildingPartGroup.isRoof = buildingPart.tags.type === 'roof';
+  if (buildingPart.tags.type === 'roof') {
+    tBuildingPartGroup.topPoint = findRoofHighestPoint(buildingPart.items)
+  }  
+
   return tBuildingPartGroup;
 }
 
+function findRoofHighestPoint (items) {
+  let highest = {z:0};
+
+  items.forEach((item) => {
+    item.points.forEach((point) => {
+      if (point.z > highest.z) {
+        highest = point;
+      }
+    })
+  })
+
+  return highest;
+}
+
 function generateBuildingGeometriesFromData(data) {
-  console.log('**********')
-  console.log(data)
   // Iterate buildings, convert each building into a group of lines
   const buildingGeometries = data.items.map(building => {
     const tBuildingGroup = new THREE.Group();
@@ -165,6 +219,9 @@ function generateBuildingGeometriesFromData(data) {
     });
 
     tBuildingGroup.tags = building.tags;
+    tBuildingGroup.name = building.tags.name;
+
+    console.log(tBuildingGroup)
 
     return tBuildingGroup;
   });
@@ -184,19 +241,45 @@ function Group(props) {
   );
 }
 
+function findRoofPoint (objects) {
+  const roof = objects.children.find(object => object.isRoof)
+  
+  return [roof.topPoint.x, roof.topPoint.y, roof.topPoint.z];
+}
+
+function Building(props) {
+  const roofPoint = findRoofPoint(props.object);
+
+  return (
+    <group>
+      <Group
+        items={ [createText(props.object.tags.name, "purple", font, roofPoint)] }
+      />
+
+      <primitive
+        object={ props.object }
+        onClick={ e => console.log("onClick", e) }
+        onPointerOver={ e => console.log("onPointerOver") }
+        onPointerOut={ e => console.log("onPointerOut") } />;
+    </group>
+  )
+}
+
 export default function App() {
 
   const [buildingGeometries, setBuildingGeometries] = useState();
   const [sampleGeometries, setSampleGeometries] = useState([]);
-
-
-  console.log('render')
+  const [isLoading, setIsLoading] = useState(true);
+  const [dimension, setDimension] = useState({});
 
   useEffect(() => {
-    loadData()
-      .then(data => generateBuildingGeometriesFromData(data))
-      .then(geometries => setBuildingGeometries(geometries));
-  }, []);
+    if (isLoading) {
+      loadData(dimension)
+        .then(data => generateBuildingGeometriesFromData(data))
+        .then(geometries => setBuildingGeometries(geometries))
+        .then(setIsLoading(false));
+    }
+  }, [isLoading]);
 
   useEffect(() => {
     loadFont()
@@ -218,8 +301,13 @@ export default function App() {
       });
   }, []);
 
+  const handleSubmit = e => {
+    e.preventDefault();
+    setIsLoading(true);
+  }
+
   return (
-    <div>
+    <form onSubmit={handleSubmit}>
       <Canvas style = {{ height: 600 }}
         camera = {{
           up: [0, 0, 1],
@@ -233,12 +321,9 @@ export default function App() {
         }}>
           <ambientLight intensity={ 1.0 } />
           <directionalLight intensity={ 0.2 } position = { [1, 1, 1] } />
-          <Group
-            items={ sampleGeometries }
-          />
           { buildingGeometries && buildingGeometries.length > 0 &&
             buildingGeometries.map((buildingGeometry, index) => {
-              return <primitive
+              return <Building
                 key={ index }
                 object={ buildingGeometry }
                 onClick={ e => console.log("onClick") }
@@ -249,23 +334,38 @@ export default function App() {
         <CameraControls / >
       </Canvas>
 
-      <div>
-        <ul>
+      <div className="buildingListContainer">
+        <ul className="buildingList">
+          <li className="buildingListItem">
+            <div className="buildinglistItemHCell">Building</div>
+            <div className="buildinglistItemHCell">Height</div>
+            <div className="buildinglistItemHCell">Width</div>
+            <div className="buildinglistItemHCell">Roof angle</div>
+          </li>
           { buildingGeometries && buildingGeometries.length > 0 &&
             buildingGeometries.map((buildingGeometry, index) => {
-              console.log(buildingGeometry.tags )
               return (
-                <li key={ index }>
-                  { buildingGeometry.tags.name }
-                  <NumericInput index={index} name="width" value=""/>
-                  <NumericInput index={index} name="height" value=""/>
-                  <NumericInput index={index} name="roofAngle" value=""/>
+                <li className="buildingListItem" key={ index }>
+                  <div className="buildinglistItemCell">
+                    { buildingGeometry.tags.name }
+                  </div>
+                  <div className="buildinglistItemCell">
+                    <NumericInput index={index} type="dimension" name="height" onChange={e => setDimension({...dimension, [index]: {...dimension[index], [e.target.name]: e.target.value}})} initialValue={10000} />
+                  </div>
+                  <div className="buildinglistItemCell">
+                    <NumericInput index={index} type="dimension" name="width" onChange={e => setDimension({...dimension, [index]: {...dimension[index], [e.target.name]: e.target.value}})} initialValue={10000} />
+                  </div>
+                  <div className="buildinglistItemCell">
+                    <NumericInput index={index} type="angle" name="roofAngle" onChange={e => setDimension({...dimension, [index]: {...dimension[index], [e.target.name]: e.target.value}})} initialValue={30} />
+                  </div>
                 </li>
               )
             })
           }
         </ul>
       </div>
-    </div>
+
+      <button>Submit changes</button>
+    </form>
   );
 }
