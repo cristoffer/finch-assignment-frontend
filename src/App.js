@@ -23,9 +23,7 @@ async function loadData(dimension) {
     params = Array.apply(null, Array(largest + 1)).map(function () {})
 
     Object.keys(dimension).forEach((key) => {
-      console.log(key, dimension[key], params[key])
       params[key] = dimension[key]
-
     })
   }
 
@@ -66,21 +64,6 @@ async function loadData(dimension) {
       resolve(JSON.parse(result))
     });
   })
-}
-
-async function loadStaticData() {
-  
-  const response = await fetch(
-    `/buildings.json`, {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json',
-      }
-    },
-  );
-
-  const result = await response.json();
-  return result;
 }
 
 let font;
@@ -234,7 +217,6 @@ function Group(props) {
 
 function findRoofPoint (objects) {
   const roof = objects.children.find(object => object.isRoof)
-  
   return [roof.topPoint.x, roof.topPoint.y, roof.topPoint.z];
 }
 
