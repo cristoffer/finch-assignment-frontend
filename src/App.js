@@ -11,12 +11,7 @@ async function loadData(dimension) {
   let params = [];
 
   if (dimension) {
-    console.log('dimension', dimension)
-
-    console.log(Object.keys(dimension))
-
     const keys = Object.keys(dimension);
-
     let largest = 0;
 
     keys.forEach((k) => {
@@ -27,16 +22,11 @@ async function loadData(dimension) {
 
     params = Array.apply(null, Array(largest + 1)).map(function () {})
 
-
     Object.keys(dimension).forEach((key) => {
       console.log(key, dimension[key], params[key])
       params[key] = dimension[key]
 
     })
-
-
-    console.log('params', params)
-
   }
 
   return new Promise(resolve => {
@@ -109,12 +99,12 @@ async function loadFont() {
   }
 }
 
-function createText(text, color, font, position) {
+function createText(text, color, font, position, size = 2000) {
   const tGeometry = new THREE.TextGeometry(
     text,
     {
       font: font,
-      size: 2000,
+      size: size,
       height: 10,
       bevelEnabled: false,
       curveSegments: 24
@@ -170,9 +160,8 @@ function generateGeometriesFromBuildingPart(buildingPart) {
         const triangleIndices = Earcut.triangulate(vertices.flat(Infinity), undefined, 3);
         const tMesh = createMesh(triangleIndices.map(index => vertices[index]), 'gray');
 
-        console.log('floor', floorGroup )
-
-        tMesh.floorMeta = { ...floorGroup.tags }
+        tMesh.floorMeta = { ...floorGroup.tags, pos: floorGroup.items[0].points[0] }
+        tMesh.isFloor = true;
 
         tBuildingPartGroup.add(tMesh);
       });
@@ -185,11 +174,11 @@ function generateGeometriesFromBuildingPart(buildingPart) {
       tBuildingPartGroup.add(tLine);
     });
   }
-
   tBuildingPartGroup.isRoof = buildingPart.tags.type === 'roof';
+  tBuildingPartGroup.isFloors = buildingPart.tags.type === 'floors';
   if (buildingPart.tags.type === 'roof') {
     tBuildingPartGroup.topPoint = findRoofHighestPoint(buildingPart.items)
-  }  
+  }
 
   return tBuildingPartGroup;
 }
@@ -221,10 +210,12 @@ function generateBuildingGeometriesFromData(data) {
     tBuildingGroup.tags = building.tags;
     tBuildingGroup.name = building.tags.name;
 
-    console.log(tBuildingGroup)
-
     return tBuildingGroup;
   });
+
+  buildingGeometries.forEach((group) => {
+    group.topPoint = findRoofPoint(group);
+  })
 
   return buildingGeometries;
 }
@@ -247,14 +238,48 @@ function findRoofPoint (objects) {
   return [roof.topPoint.x, roof.topPoint.y, roof.topPoint.z];
 }
 
+const BuildingText = React.memo(function BuildingText({ name, area, xPos, yPos, zPos }) {
+  return (
+    <Group
+      items={ [createText(name, "purple", font, [xPos,yPos,zPos]),
+      createText(`height: ${zPos / 1000} m`, "purple", font, [xPos + 2000, yPos, zPos + 1000], 500),
+      createText(`area: ${(area / 1000000).toFixed(2)} m²`, "purple", font, [xPos + 2000, yPos, zPos], 500)] }
+    />
+  )
+})
+
+const FloorText = React.memo(function FloorText ({item, xPos, yPos}) {
+  return (
+    <Group
+      items={ [createText(`Level: ${item.floorMeta.level}`, "purple", font, [xPos, yPos, item.floorMeta.pos.z + 550], 500),
+      createText(`Area: ${(item.floorMeta.area / 1000000).toFixed(2)} m²`, "purple", font, [xPos, yPos, item.floorMeta.pos.z], 500)] }
+    />
+  );
+})
+
 function Building(props) {
-  const roofPoint = findRoofPoint(props.object);
+  const { topPoint } = props.object;
 
   return (
     <group>
-      <Group
-        items={ [createText(props.object.tags.name, "purple", font, roofPoint)] }
+      <BuildingText
+        name={props.object.tags.name}
+        area={props.object.tags.area}
+        xPos={topPoint[0]}
+        yPos={topPoint[1]}
+        zPos={topPoint[2]}
       />
+
+      {props.object.children.find(item => item.isFloors).children.map((floor, key) => {
+        return (
+          <FloorText
+            key={key}
+            item={floor}
+            xPos={topPoint[0]}
+            yPos={topPoint[1]}
+          />
+        )
+      })}
 
       <primitive
         object={ props.object }
@@ -266,7 +291,6 @@ function Building(props) {
 }
 
 export default function App() {
-
   const [buildingGeometries, setBuildingGeometries] = useState();
   const [sampleGeometries, setSampleGeometries] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -277,7 +301,11 @@ export default function App() {
       loadData(dimension)
         .then(data => generateBuildingGeometriesFromData(data))
         .then(geometries => setBuildingGeometries(geometries))
-        .then(setIsLoading(false));
+        .then(() => {
+          setTimeout(() => {
+            setIsLoading(false);
+          }, 500)
+        });
     }
   }, [isLoading]);
 
@@ -338,8 +366,8 @@ export default function App() {
         <ul className="buildingList">
           <li className="buildingListItem">
             <div className="buildinglistItemHCell">Building</div>
-            <div className="buildinglistItemHCell">Height</div>
-            <div className="buildinglistItemHCell">Width</div>
+            <div className="buildinglistItemHCell">Height (mm)</div>
+            <div className="buildinglistItemHCell">Width (mm)</div>
             <div className="buildinglistItemHCell">Roof angle</div>
           </li>
           { buildingGeometries && buildingGeometries.length > 0 &&
@@ -365,7 +393,14 @@ export default function App() {
         </ul>
       </div>
 
-      <button>Submit changes</button>
+      <button className="submitButton">Submit changes</button>
+      
+      {isLoading ? 
+        <div className="loadingOverlay">
+          <div className="loadingSpinner"></div>
+        </div>
+      : ''}
+
     </form>
   );
 }

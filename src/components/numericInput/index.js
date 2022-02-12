@@ -1,8 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 
 export default function NumericInput ({ name, onChange, type, initialValue }) {
 	const step = type === 'angle' ? 1 : 100;
-
 	const [value, setValue] = useState(initialValue);
 
 	const handleChange = e => {
@@ -12,6 +11,7 @@ export default function NumericInput ({ name, onChange, type, initialValue }) {
 	
 	return (
 		<input 
+			className="numericInput"
 			name={name} 
 			type="number" 
 			step={step} 
